@@ -294,7 +294,13 @@ async function fetchProfilePage(handle: string, diagnostics?: Diagnostics): Prom
  */
 async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics): Promise<PublicVideoStats[]> {
   const proxyAgent = getCrawlerProxyAgent();
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  // A proxied request adds real hops (observed: timing out well past 7s on a
+  // free-tier scraping proxy) - give it much more room, and skip the retry
+  // since a slow proxy is unlikely to suddenly be fast on a second try.
+  const maxAttempts = proxyAgent ? 1 : 2;
+  const timeoutMs = proxyAgent ? 20000 : 7000;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const startedAt = Date.now();
     try {
       const response = await fetchWithTimeout(
@@ -307,10 +313,12 @@ async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics):
           cache: "no-store",
           ...(proxyAgent ? { dispatcher: proxyAgent } : {}),
         },
-        7000
+        timeoutMs
       );
       if (!response.ok) {
-        console.warn(`[tiktok] crawler fetch for @${handle} returned HTTP ${response.status} (attempt ${attempt}/2)`);
+        console.warn(
+          `[tiktok] crawler fetch for @${handle} returned HTTP ${response.status} (attempt ${attempt}/${maxAttempts})`
+        );
         diagnostics?.push({
           label: "crawler",
           attempt,
@@ -319,7 +327,7 @@ async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics):
           durationMs: Date.now() - startedAt,
           viaProxy: Boolean(proxyAgent),
         });
-        if (attempt < 2) {
+        if (attempt < maxAttempts) {
           await sleep(500);
           continue;
         }
@@ -332,7 +340,7 @@ async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics):
 
       if (items.length === 0) {
         console.warn(
-          `[tiktok] crawler fetch for @${handle} succeeded but ItemList was empty/missing (attempt ${attempt}/2)`
+          `[tiktok] crawler fetch for @${handle} succeeded but ItemList was empty/missing (attempt ${attempt}/${maxAttempts})`
         );
       }
       diagnostics?.push({
@@ -350,7 +358,7 @@ async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics):
         .filter((video): video is PublicVideoStats => video !== null)
         .sort((a, b) => (b.createTime ?? 0) - (a.createTime ?? 0));
     } catch (error) {
-      console.error(`[tiktok] crawler fetch for @${handle} threw (attempt ${attempt}/2):`, error);
+      console.error(`[tiktok] crawler fetch for @${handle} threw (attempt ${attempt}/${maxAttempts}):`, error);
       diagnostics?.push({
         label: "crawler",
         attempt,
@@ -358,7 +366,7 @@ async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics):
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
         viaProxy: Boolean(proxyAgent),
       });
-      if (attempt < 2) {
+      if (attempt < maxAttempts) {
         await sleep(500);
         continue;
       }
