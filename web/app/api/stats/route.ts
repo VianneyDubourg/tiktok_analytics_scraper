@@ -4,6 +4,11 @@ import { incrementSearches } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
+// Two outbound TikTok requests happen per search, one with a retry - worst
+// case comfortably exceeds Vercel's default function timeout, which was
+// silently killing the video-stats fetch in production. Give it real room.
+export const maxDuration = 30;
+
 const STATUS_BY_CODE: Record<string, number> = {
   NOT_FOUND: 404,
   INVALID_HANDLE: 400,

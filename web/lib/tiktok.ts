@@ -89,18 +89,40 @@ export async function fetchPublicProfile(rawHandle: string): Promise<PublicProfi
   return profile;
 }
 
+/**
+ * Vercel silently kills a serverless function that overruns its execution
+ * budget, which previously showed up as "video fetch mysteriously fails in
+ * production but works fine locally" with zero logging to explain why.
+ * Every outbound TikTok request now has its own timeout (so a stalled
+ * request can't eat the whole function budget) and logs on failure.
+ */
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchProfilePage(handle: string): Promise<PublicProfileStats> {
   let response: Response;
   try {
-    response = await fetch(`https://www.tiktok.com/@${encodeURIComponent(handle)}`, {
-      headers: {
-        "User-Agent": BROWSER_USER_AGENT,
-        "Accept-Language": "en-US,en;q=0.9,fr;q=0.8",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    response = await fetchWithTimeout(
+      `https://www.tiktok.com/@${encodeURIComponent(handle)}`,
+      {
+        headers: {
+          "User-Agent": BROWSER_USER_AGENT,
+          "Accept-Language": "en-US,en;q=0.9,fr;q=0.8",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+        cache: "no-store",
       },
-      cache: "no-store",
-    });
-  } catch {
+      8000
+    );
+  } catch (error) {
+    console.error(`[tiktok] profile fetch failed for @${handle}:`, error);
     throw new TikTokFetchError("Impossible de contacter TikTok pour le moment.", "NETWORK");
   }
 
@@ -141,21 +163,28 @@ async function fetchProfilePage(handle: string): Promise<PublicProfileStats> {
  * Best-effort: never throws, resolves to [] if every attempt fails. TikTok's
  * anti-bot layer occasionally rejects a single request transiently (observed
  * in testing), so this retries once after a short delay before giving up -
- * cheap insurance against a spurious "unavailable" for the user.
+ * cheap insurance against a spurious "unavailable" for the user. Every
+ * failure is logged with the reason, since this used to fail silently and
+ * was impossible to diagnose from Vercel's production logs.
  */
 async function fetchCrawlerVideoList(handle: string): Promise<PublicVideoStats[]> {
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      const response = await fetch(`https://www.tiktok.com/@${encodeURIComponent(handle)}`, {
-        headers: {
-          "User-Agent": CRAWLER_USER_AGENT,
-          "Accept-Language": "en-US,en;q=0.9",
+      const response = await fetchWithTimeout(
+        `https://www.tiktok.com/@${encodeURIComponent(handle)}`,
+        {
+          headers: {
+            "User-Agent": CRAWLER_USER_AGENT,
+            "Accept-Language": "en-US,en;q=0.9",
+          },
+          cache: "no-store",
         },
-        cache: "no-store",
-      });
+        7000
+      );
       if (!response.ok) {
+        console.warn(`[tiktok] crawler fetch for @${handle} returned HTTP ${response.status} (attempt ${attempt}/2)`);
         if (attempt < 2) {
-          await sleep(700);
+          await sleep(500);
           continue;
         }
         return [];
@@ -165,13 +194,20 @@ async function fetchCrawlerVideoList(handle: string): Promise<PublicVideoStats[]
       const data = extractScriptJson(html, "ItemList");
       const items: any[] = Array.isArray(data?.itemListElement) ? data.itemListElement : [];
 
+      if (items.length === 0) {
+        console.warn(
+          `[tiktok] crawler fetch for @${handle} succeeded but ItemList was empty/missing (attempt ${attempt}/2)`
+        );
+      }
+
       return items
         .map(mapJsonLdVideo)
         .filter((video): video is PublicVideoStats => video !== null)
         .sort((a, b) => (b.createTime ?? 0) - (a.createTime ?? 0));
-    } catch {
+    } catch (error) {
+      console.error(`[tiktok] crawler fetch for @${handle} threw (attempt ${attempt}/2):`, error);
       if (attempt < 2) {
-        await sleep(700);
+        await sleep(500);
         continue;
       }
       return [];
