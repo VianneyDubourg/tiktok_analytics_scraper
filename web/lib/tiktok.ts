@@ -1,7 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // The `any`s below are unavoidable: this parses TikTok's undocumented,
 // unstable embedded JSON, not a typed API response.
+import { ProxyAgent, fetch as undiciFetch } from "undici";
+import type { RequestInit as UndiciRequestInit, Response as UndiciResponse } from "undici";
 import type { PublicProfileStats, PublicVideoStats } from "@/types";
+
+// Confirmed in production (Vercel, iad1): TikTok returns an instant HTTP 403
+// for the crawler-flagged request specifically when it originates from
+// Vercel's IP ranges - almost certainly verifying Googlebot's claimed
+// identity against Google's published IP list, which Vercel obviously isn't
+// in. Every other well-known bot UA gets served the *plain* page (no
+// ItemList) rather than being blocked, so there's no alternative UA to fall
+// back to - only the network path can change. If TIKTOK_PROXY_URL is set
+// (a standard `http://user:pass@host:port` proxy endpoint - ScraperAPI,
+// ScrapingBee, Zenrows, Bright Data, Smartproxy, etc. all expose one), only
+// the crawler-flagged request is routed through it; profile-level stats
+// already work fine directly and shouldn't spend proxy quota.
+let crawlerProxyAgent: ProxyAgent | null | undefined;
+function getCrawlerProxyAgent(): ProxyAgent | null {
+  if (crawlerProxyAgent !== undefined) return crawlerProxyAgent;
+  const proxyUrl = process.env.TIKTOK_PROXY_URL;
+  crawlerProxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : null;
+  return crawlerProxyAgent;
+}
 
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -23,6 +44,68 @@ const CRAWLER_USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.
 
 export type TikTokErrorCode = "NOT_FOUND" | "BLOCKED" | "PARSE_FAILED" | "NETWORK" | "INVALID_HANDLE";
 
+// Candidates for a one-off diagnostic scan (see scanUserAgents below) after
+// confirming in production that CRAWLER_USER_AGENT gets an instant HTTP 403
+// from Vercel's IPs - the working theory being that TikTok verifies
+// Googlebot's claimed identity against Google's published IP ranges (which
+// Vercel's obviously isn't in), but may not apply the same rigor to every
+// other well-known bot identity.
+const USER_AGENT_CANDIDATES: Record<string, string> = {
+  googlebot: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+  bingbot: "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+  facebook: "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+  twitter: "Twitterbot/1.0",
+  slack: "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
+  discord: "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+  whatsapp: "WhatsApp/2.23.20.0 A",
+  telegram: "TelegramBot (like TwitterBot)",
+  plainBrowser: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+};
+
+export interface UserAgentScanResult {
+  name: string;
+  status?: number;
+  ok?: boolean;
+  durationMs: number;
+  itemListEntries?: number;
+  error?: string;
+}
+
+/**
+ * One-off diagnostic: try every candidate User-Agent above against a real
+ * profile page and report status + whether it got the ItemList JSON-LD.
+ * Not part of the normal request path - only invoked via ?debug=1&scan=1.
+ */
+export async function scanUserAgents(handle: string): Promise<UserAgentScanResult[]> {
+  const results: UserAgentScanResult[] = [];
+  for (const [name, userAgent] of Object.entries(USER_AGENT_CANDIDATES)) {
+    const startedAt = Date.now();
+    try {
+      const response = await fetchWithTimeout(
+        `https://www.tiktok.com/@${encodeURIComponent(handle)}`,
+        { headers: { "User-Agent": userAgent, "Accept-Language": "en-US,en;q=0.9" }, cache: "no-store" },
+        7000
+      );
+      const durationMs = Date.now() - startedAt;
+      if (!response.ok) {
+        results.push({ name, status: response.status, ok: false, durationMs });
+        continue;
+      }
+      const html = await response.text();
+      const data = extractScriptJson(html, "ItemList");
+      const entries = Array.isArray(data?.itemListElement) ? data.itemListElement.length : 0;
+      results.push({ name, status: response.status, ok: true, durationMs, itemListEntries: entries });
+    } catch (error) {
+      results.push({
+        name,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+    }
+  }
+  return results;
+}
+
 /**
  * Optional diagnostic trail for `?debug=1` requests (see app/api/stats).
  * Lets a report of "it doesn't work in production" be diagnosed from the
@@ -37,6 +120,7 @@ export interface DiagnosticEntry {
   durationMs: number;
   error?: string;
   note?: string;
+  viaProxy?: boolean;
 }
 export type Diagnostics = DiagnosticEntry[];
 
@@ -116,11 +200,18 @@ export async function fetchPublicProfile(
  * Every outbound TikTok request now has its own timeout (so a stalled
  * request can't eat the whole function budget) and logs on failure.
  */
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  init: UndiciRequestInit,
+  timeoutMs: number
+): Promise<UndiciResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    // undiciFetch (not the Node global) so the optional `dispatcher` option
+    // (proxy routing) is guaranteed to be understood the same way in every
+    // runtime this ends up deployed to.
+    return await undiciFetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
@@ -128,7 +219,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 
 async function fetchProfilePage(handle: string, diagnostics?: Diagnostics): Promise<PublicProfileStats> {
   const startedAt = Date.now();
-  let response: Response;
+  let response: UndiciResponse;
   try {
     response = await fetchWithTimeout(
       `https://www.tiktok.com/@${encodeURIComponent(handle)}`,
@@ -202,6 +293,7 @@ async function fetchProfilePage(handle: string, diagnostics?: Diagnostics): Prom
  * was impossible to diagnose from Vercel's production logs.
  */
 async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics): Promise<PublicVideoStats[]> {
+  const proxyAgent = getCrawlerProxyAgent();
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const startedAt = Date.now();
     try {
@@ -213,6 +305,7 @@ async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics):
             "Accept-Language": "en-US,en;q=0.9",
           },
           cache: "no-store",
+          ...(proxyAgent ? { dispatcher: proxyAgent } : {}),
         },
         7000
       );
@@ -224,6 +317,7 @@ async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics):
           status: response.status,
           ok: false,
           durationMs: Date.now() - startedAt,
+          viaProxy: Boolean(proxyAgent),
         });
         if (attempt < 2) {
           await sleep(500);
@@ -248,6 +342,7 @@ async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics):
         ok: true,
         durationMs: Date.now() - startedAt,
         note: `ItemList entries: ${items.length}, html length: ${html.length}`,
+        viaProxy: Boolean(proxyAgent),
       });
 
       return items
@@ -261,6 +356,7 @@ async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics):
         attempt,
         durationMs: Date.now() - startedAt,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        viaProxy: Boolean(proxyAgent),
       });
       if (attempt < 2) {
         await sleep(500);

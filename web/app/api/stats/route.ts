@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchPublicProfile, TikTokFetchError, type Diagnostics } from "@/lib/tiktok";
+import { fetchPublicProfile, scanUserAgents, TikTokFetchError, type Diagnostics } from "@/lib/tiktok";
 import { incrementSearches } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,14 @@ export async function GET(request: NextRequest) {
   // be diagnosed by opening a URL - no hosting dashboard access needed.
   const debug = request.nextUrl.searchParams.get("debug") === "1";
   const diagnostics: Diagnostics | undefined = debug ? [] : undefined;
+
+  // ?debug=1&scan=1 skips the normal lookup entirely and instead tries a
+  // batch of candidate User-Agents against the same TikTok page, to find
+  // out which ones (if any) aren't blocked from this deployment's IP.
+  if (debug && request.nextUrl.searchParams.get("scan") === "1") {
+    const scan = await scanUserAgents(handle || "tiktok");
+    return NextResponse.json({ scan });
+  }
 
   try {
     const profile = await fetchPublicProfile(handle, diagnostics);

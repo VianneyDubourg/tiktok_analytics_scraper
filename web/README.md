@@ -64,18 +64,52 @@ supposées :
   sans le chemin "robot d'indexation" ci-dessus, il n'y aurait aucune
   statistique par vidéo. Le code de repli (`parseUniversalData` /
   `parseSigiState`) reste en place au cas où TikTok le réactiverait.
-- TikTok pourrait un jour vérifier l'identité d'un robot d'indexation par IP
-  / reverse DNS plutôt que de faire confiance au seul en-tête User-Agent —
-  ce qui casserait silencieusement le détail par vidéo. Si les stats de
-  profil s'arrêtent de fonctionner aussi, ajustez `parseUniversalData` /
-  `parseSigiState` dans `lib/tiktok.ts` ; si seul le détail par vidéo casse,
-  ajustez `mapJsonLdVideo` / `fetchCrawlerVideoList`.
-- TikTok peut aussi limiter/bloquer un trafic trop soutenu depuis les IP
-  partagées de Vercel (comportement anti-bot standard, hors de notre
-  contrôle) — plus probable maintenant que deux requêtes partent par
-  recherche. Le site affiche un message clair dans ce cas plutôt que de
-  planter, mais un pic de partage viral peut temporairement dégrader la
-  fiabilité pour tout le monde.
+- **Confirmé en production (pas juste théorique) : TikTok bloque la requête
+  "robot d'indexation" depuis les IP de Vercel.** Diagnostiqué via
+  `?debug=1` (voir plus bas) : HTTP 403 en ~50-250ms sur les deux tentatives,
+  bien trop rapide pour être autre chose qu'un blocage réseau immédiat
+  (probablement une vérification de l'IP de Googlebot contre les plages
+  officielles de Google, dans lesquelles Vercel n'est évidemment pas). Un
+  scan de plusieurs identités de robots connus (Facebook, Twitter, Slack,
+  Discord, WhatsApp, Telegram, Bingbot) a confirmé qu'aucune autre identité
+  ne reçoit la page spéciale avec les stats vidéo — seul Googlebot le
+  déclenche, et c'est justement lui qui est bloqué. Il n'y a donc pas de
+  robot de repli possible : seul le chemin réseau peut changer, pas
+  l'en-tête. Voir `TIKTOK_PROXY_URL` ci-dessous.
+- TikTok peut aussi limiter/bloquer un trafic trop soutenu depuis une IP
+  donnée (comportement anti-bot standard) — plus probable maintenant que
+  deux requêtes partent par recherche. Le site affiche un message clair
+  dans ce cas plutôt que de planter, mais un pic de partage viral peut
+  temporairement dégrader la fiabilité pour tout le monde.
+
+### Contourner le blocage IP : `TIKTOK_PROXY_URL`
+
+Puisque seul le chemin réseau compte (pas l'en-tête), la requête vidéo peut
+être routée à travers un service de proxy dont l'IP n'est pas bloquée par
+TikTok. Configurable via une seule variable d'environnement
+`TIKTOK_PROXY_URL` (voir `.env.example`) : une URL de proxy HTTP
+authentifiée standard (`http://user:mdp@host:port`), fournie par
+n'importe quel service de proxy pour scraping (ScraperAPI, ScrapingBee,
+Zenrows, Bright Data, Smartproxy...). Non lié à un fournisseur en
+particulier — n'importe lequel exposant ce format standard fonctionne.
+
+Sans cette variable, le comportement est inchangé : la requête part
+directement (et échoue sur les IP bloquées comme celles de Vercel), les
+stats de profil restent fiables, seul le détail par vidéo est indisponible.
+
+### Diagnostiquer un souci en production : `?debug=1` et `?scan=1`
+
+Deux paramètres de requête sur `/api/stats`, utiles pour diagnostiquer un
+"ça ne marche pas" sans avoir besoin d'accéder aux logs de l'hébergeur :
+
+- `?handle=<compte>&debug=1` — renvoie, en plus du résultat normal, un
+  tableau `diagnostics` avec le code de statut, la durée et l'erreur
+  éventuelle de chaque requête sortante vers TikTok.
+- `?handle=<compte>&debug=1&scan=1` — ignore la recherche normale et teste
+  une liste d'identités de robots connues contre la même page, pour voir
+  laquelle (le cas échéant) n'est pas bloquée depuis le déploiement actuel.
+
+Exemple : `https://ton-domaine.vercel.app/api/stats?handle=zachking&debug=1`
 
 ## Développement local
 
