@@ -11,17 +11,17 @@ export function formatCount(value: number | null | undefined): string {
       return `${(value / threshold).toFixed(1).replace(/\.0$/, "")}${suffix}`;
     }
   }
-  return value.toLocaleString("fr-FR");
+  return value.toLocaleString("en-US");
 }
 
 export function formatExact(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
-  return value.toLocaleString("fr-FR");
+  return value.toLocaleString("en-US");
 }
 
 export function formatDate(epochSeconds: number | null | undefined): string {
   if (!epochSeconds) return "—";
-  return new Date(epochSeconds * 1000).toLocaleDateString("fr-FR", {
+  return new Date(epochSeconds * 1000).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",

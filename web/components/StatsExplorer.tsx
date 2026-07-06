@@ -42,7 +42,7 @@ export default function StatsExplorer() {
 
       if (!response.ok) {
         setStatus("error");
-        setErrorMessage(data.error ?? "Une erreur est survenue.");
+        setErrorMessage(data.error ?? "Something went wrong.");
         return;
       }
 
@@ -50,7 +50,7 @@ export default function StatsExplorer() {
       setStatus("success");
     } catch {
       setStatus("error");
-      setErrorMessage("Impossible de contacter le serveur.");
+      setErrorMessage("Couldn't reach the server.");
     }
   }
 
@@ -74,15 +74,15 @@ export default function StatsExplorer() {
     <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-12 px-6 py-16 sm:py-24">
       <header className="flex flex-col items-center gap-5 text-center animate-rise-in">
         <span className="surface-card rounded-full px-4 py-1.5 text-xs font-medium tracking-wide text-[var(--muted)]">
-          Gratuit · Sans connexion · Instantané
+          Free · No login · Instant
         </span>
         <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
           <span className="gradient-text">TikTok Stats</span> Checker
         </h1>
         <p className="max-w-xl text-balance text-base text-[var(--muted)] sm:text-lg">
-          Entrez un identifiant TikTok public pour voir ses statistiques :
-          abonnés, likes totaux, et vues / likes / commentaires / partages de
-          ses dernières vidéos.
+          Enter a public TikTok handle to see its stats: followers, total
+          likes, and views / likes / comments / shares on its most recent
+          videos.
         </p>
       </header>
 
@@ -96,7 +96,7 @@ export default function StatsExplorer() {
           <input
             value={handle}
             onChange={(event) => setHandle(event.target.value)}
-            placeholder="nom.dutilisateur"
+            placeholder="username"
             className="w-full bg-transparent outline-none placeholder:text-[var(--muted)]"
             autoCapitalize="none"
             autoCorrect="off"
@@ -112,12 +112,12 @@ export default function StatsExplorer() {
           {status === "loading" ? (
             <>
               <RefreshIcon className="h-4 w-4 animate-spin" />
-              Analyse...
+              Analyzing...
             </>
           ) : (
             <>
               <SearchIcon className="h-4 w-4" />
-              Analyser
+              Analyze
             </>
           )}
         </button>
@@ -153,9 +153,9 @@ export default function StatsExplorer() {
           />
         </a>
         <p className="flex flex-wrap items-center justify-center gap-1 text-center">
-          100% gratuit &amp; open source · Codé avec
+          100% free &amp; open source · Built with
           <HeartIcon fill="currentColor" className="h-3.5 w-3.5 text-[var(--accent-pink)]" />
-          par{" "}
+          by{" "}
           <a
             href="https://www.instagram.com/vianney_fpv"
             target="_blank"
@@ -221,23 +221,23 @@ function ProfileResults({ profile, onRetryVideos, videosRetrying }: ProfileResul
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatTile icon={<UsersIcon className="h-4 w-4" />} label="Abonnés" value={formatCount(profile.followers)} />
+        <StatTile icon={<UsersIcon className="h-4 w-4" />} label="Followers" value={formatCount(profile.followers)} />
         <StatTile
           icon={<UserPlusIcon className="h-4 w-4" />}
-          label="Abonnements"
+          label="Following"
           value={formatCount(profile.following)}
         />
-        <StatTile icon={<HeartIcon className="h-4 w-4" />} label="Likes totaux" value={formatCount(profile.totalLikes)} />
-        <StatTile icon={<ClipIcon className="h-4 w-4" />} label="Vidéos" value={formatCount(profile.videoCount)} />
+        <StatTile icon={<HeartIcon className="h-4 w-4" />} label="Total likes" value={formatCount(profile.totalLikes)} />
+        <StatTile icon={<ClipIcon className="h-4 w-4" />} label="Videos" value={formatCount(profile.videoCount)} />
       </div>
 
       {profile.videos.length > 0 ? (
         <div className="flex flex-col gap-4">
           <div>
-            <h3 className="text-lg font-semibold">Vidéos récentes ({profile.videos.length})</h3>
+            <h3 className="text-lg font-semibold">Recent videos ({profile.videos.length})</h3>
             <p className="text-xs text-[var(--muted)]">
-              TikTok ne fournit publiquement qu&apos;un échantillon des vidéos
-              les plus récentes, pas le catalogue complet.
+              TikTok only publicly exposes a sample of recent videos, not the
+              full catalog.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -256,7 +256,7 @@ function ProfileResults({ profile, onRetryVideos, videosRetrying }: ProfileResul
                   )}
                   <div className="flex flex-col gap-1 text-sm">
                     <p className="line-clamp-3 text-[var(--foreground)]">
-                      {video.description || "(sans description)"}
+                      {video.description || "(no description)"}
                     </p>
                     <p className="flex items-center gap-1 text-xs text-[var(--muted)]">
                       {formatDate(video.createTime)} · {formatDuration(video.durationSeconds)}
@@ -289,15 +289,15 @@ function ProfileResults({ profile, onRetryVideos, videosRetrying }: ProfileResul
       ) : profile.videoCount === 0 ? (
         <div className="surface-card flex flex-col items-center gap-2 rounded-2xl px-5 py-6 text-center text-sm text-[var(--muted)]">
           <ClipIcon className="h-5 w-5 text-[var(--muted)]" />
-          <p>Ce compte n&apos;a pas encore publié de vidéo publique.</p>
+          <p>This account hasn&apos;t published any public videos yet.</p>
         </div>
       ) : (
         <div className="surface-card flex flex-col items-center gap-3 rounded-2xl px-5 py-6 text-center text-sm text-[var(--muted)]">
           <AlertIcon className="h-5 w-5 text-[var(--accent-pink)]" />
           <p>
-            Le détail par vidéo est temporairement indisponible pour ce compte
-            (limite de trafic TikTok probable). Les statistiques globales du
-            profil ci-dessus restent fiables.
+            Per-video details are temporarily unavailable for this account
+            (likely a TikTok rate limit). The profile stats above remain
+            reliable.
           </p>
           <button
             type="button"
@@ -306,7 +306,7 @@ function ProfileResults({ profile, onRetryVideos, videosRetrying }: ProfileResul
             className="flex items-center gap-2 rounded-full border border-[var(--surface-border)] px-4 py-2 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshIcon className={`h-3.5 w-3.5 ${videosRetrying ? "animate-spin" : ""}`} />
-            {videosRetrying ? "Nouvelle tentative..." : "Réessayer"}
+            {videosRetrying ? "Retrying..." : "Retry"}
           </button>
         </div>
       )}

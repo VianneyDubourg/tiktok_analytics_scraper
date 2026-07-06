@@ -14,16 +14,16 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "TikTok Stats Checker",
-  description: "Consultez gratuitement les statistiques publiques de n'importe quel compte TikTok : abonnés, likes, vues par vidéo.",
+  description: "Free lookup of any public TikTok account's stats: followers, likes, and per-video views.",
   openGraph: {
     title: "TikTok Stats Checker",
-    description: "Consultez gratuitement les statistiques publiques de n'importe quel compte TikTok.",
+    description: "Free lookup of any public TikTok account's stats.",
     type: "website",
   },
   twitter: {
     card: "summary",
     title: "TikTok Stats Checker",
-    description: "Consultez gratuitement les statistiques publiques de n'importe quel compte TikTok.",
+    description: "Free lookup of any public TikTok account's stats.",
   },
 };
 
@@ -41,7 +41,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="fr"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

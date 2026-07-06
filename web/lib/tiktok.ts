@@ -179,7 +179,7 @@ export async function fetchPublicProfile(
 ): Promise<PublicProfileStats> {
   const handle = normalizeHandle(rawHandle);
   if (!handle || !/^[\w.-]{1,64}$/.test(handle)) {
-    throw new TikTokFetchError("Identifiant TikTok invalide.", "INVALID_HANDLE");
+    throw new TikTokFetchError("Invalid TikTok handle.", "INVALID_HANDLE");
   }
 
   const [profile, videos] = await Promise.all([
@@ -248,15 +248,15 @@ async function fetchProfilePage(handle: string, diagnostics?: Diagnostics): Prom
       durationMs: Date.now() - startedAt,
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     });
-    throw new TikTokFetchError("Impossible de contacter TikTok pour le moment.", "NETWORK");
+    throw new TikTokFetchError("Couldn't reach TikTok right now.", "NETWORK");
   }
 
   if (response.status === 404) {
-    throw new TikTokFetchError(`Compte "@${handle}" introuvable.`, "NOT_FOUND");
+    throw new TikTokFetchError(`Account "@${handle}" not found.`, "NOT_FOUND");
   }
   if (!response.ok) {
     throw new TikTokFetchError(
-      "TikTok a refusé la requête (limite de trafic probable). Réessayez dans quelques minutes.",
+      "TikTok refused the request (likely rate-limited). Try again in a few minutes.",
       "BLOCKED"
     );
   }
@@ -264,7 +264,7 @@ async function fetchProfilePage(handle: string, diagnostics?: Diagnostics): Prom
   const html = await response.text();
 
   if (isExplicitlyNotFound(html)) {
-    throw new TikTokFetchError(`Compte "@${handle}" introuvable ou indisponible.`, "NOT_FOUND");
+    throw new TikTokFetchError(`Account "@${handle}" not found or unavailable.`, "NOT_FOUND");
   }
 
   const parsed = parseUniversalData(html) ?? parseSigiState(html);
@@ -272,12 +272,12 @@ async function fetchProfilePage(handle: string, diagnostics?: Diagnostics): Prom
   if (!parsed) {
     if (/verify to continue|captcha/i.test(html)) {
       throw new TikTokFetchError(
-        "TikTok demande une vérification anti-robot pour cette requête. Réessayez plus tard.",
+        "TikTok is asking for anti-bot verification on this request. Try again later.",
         "BLOCKED"
       );
     }
     throw new TikTokFetchError(
-      "Format de page TikTok non reconnu : l'interface a probablement changé.",
+      "Unrecognized TikTok page format: their interface probably changed.",
       "PARSE_FAILED"
     );
   }

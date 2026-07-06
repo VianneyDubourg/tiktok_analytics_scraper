@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       );
     }
     return NextResponse.json(
-      { error: "Erreur inattendue.", ...(debug ? { diagnostics } : {}) },
+      { error: "Unexpected error.", ...(debug ? { diagnostics } : {}) },
       { status: 500 }
     );
   }
