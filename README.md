@@ -1,4 +1,21 @@
-# TikTok Studio Analytics Scraper
+# TikTok Analytics Scraper
+
+Ce dépôt contient deux projets complémentaires, open source (MIT) :
+
+- **[`web/`](web/)** — site public **TikTok Stats Checker**, gratuit,
+  hébergeable sur Vercel : n'importe qui entre un `@handle` TikTok et obtient
+  ses statistiques **publiques** (abonnés, likes totaux, nombre de vidéos),
+  avec un compteur public de visites et de comptes analysés. Aucune
+  connexion requise. Voir [`web/README.md`](web/README.md) pour le
+  déploiement et les limites connues (vérifiées en conditions réelles).
+- **Le scraper Python à la racine** (ce README) — outil Playwright en local,
+  sur votre propre compte connecté, pour récupérer les statistiques
+  **privées** de TikTok Studio (watch time, rétention, taux de complétion,
+  abonnés générés) qu'aucun site public ne peut obtenir sans connexion.
+
+---
+
+## Scraper Python (TikTok Studio, compte privé)
 
 Outil Python qui se connecte à **TikTok Studio**, parcourt toutes les vidéos
 d'un compte, extrait toutes les statistiques visibles pour chacune, puis
