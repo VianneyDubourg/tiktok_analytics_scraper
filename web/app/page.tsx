@@ -6,6 +6,9 @@ import StatsExplorer from "@/components/StatsExplorer";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const counters = await incrementViews();
-  return <StatsExplorer initialCounters={counters} />;
+  // Counter display is hidden in the UI for now (see StatsExplorer), but
+  // views keep being tallied server-side so the count isn't lost in the
+  // meantime - re-enabling the display later needs no backend change.
+  await incrementViews();
+  return <StatsExplorer />;
 }

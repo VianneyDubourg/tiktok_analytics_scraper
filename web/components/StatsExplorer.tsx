@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import type { Counters, PublicProfileStats } from "@/types";
-import { formatCount, formatDate, formatDuration, formatExact } from "@/lib/format";
+import type { PublicProfileStats } from "@/types";
+import { formatCount, formatDate, formatDuration } from "@/lib/format";
 import {
   AlertIcon,
   AtIcon,
@@ -19,18 +19,13 @@ import {
   UsersIcon,
 } from "@/components/icons";
 
-interface Props {
-  initialCounters: Counters;
-}
-
 type Status = "idle" | "loading" | "error" | "success";
 
-export default function StatsExplorer({ initialCounters }: Props) {
+export default function StatsExplorer() {
   const [handle, setHandle] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [profile, setProfile] = useState<PublicProfileStats | null>(null);
-  const [counters, setCounters] = useState<Counters>(initialCounters);
   const [videosRetrying, setVideosRetrying] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -52,7 +47,6 @@ export default function StatsExplorer({ initialCounters }: Props) {
       }
 
       setProfile(data.profile);
-      setCounters((prev) => ({ ...prev, searches: data.searches ?? prev.searches }));
       setStatus("success");
     } catch {
       setStatus("error");
@@ -68,7 +62,6 @@ export default function StatsExplorer({ initialCounters }: Props) {
       const data = await response.json();
       if (response.ok) {
         setProfile(data.profile);
-        setCounters((prev) => ({ ...prev, searches: data.searches ?? prev.searches }));
       }
     } catch {
       // Best effort: keep whatever we already had if the retry itself fails.
@@ -144,16 +137,8 @@ export default function StatsExplorer({ initialCounters }: Props) {
       )}
 
       <footer className="mt-auto flex flex-col items-center gap-4 pt-10 text-xs text-[var(--muted)] sm:text-sm">
-        <div className="flex justify-center gap-3">
-          <span className="surface-card flex items-center gap-2 rounded-full px-4 py-2">
-            <EyeIcon className="h-3.5 w-3.5" />
-            {formatExact(counters.views)} visites
-          </span>
-          <span className="surface-card flex items-center gap-2 rounded-full px-4 py-2">
-            <SearchIcon className="h-3.5 w-3.5" />
-            {formatExact(counters.searches)} comptes analysés
-          </span>
-        </div>
+        {/* Visit/search counters hidden for now (Upstash not yet connected) -
+            see app/page.tsx and lib/redis.ts, both still counting silently. */}
         <p className="flex flex-wrap items-center justify-center gap-1 text-center">
           100% gratuit &amp; open source · Codé avec
           <HeartIcon fill="currentColor" className="h-3.5 w-3.5 text-[var(--accent-pink)]" />
