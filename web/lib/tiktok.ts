@@ -23,6 +23,23 @@ const CRAWLER_USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.
 
 export type TikTokErrorCode = "NOT_FOUND" | "BLOCKED" | "PARSE_FAILED" | "NETWORK" | "INVALID_HANDLE";
 
+/**
+ * Optional diagnostic trail for `?debug=1` requests (see app/api/stats).
+ * Lets a report of "it doesn't work in production" be diagnosed from the
+ * JSON response itself - no need to dig through a hosting dashboard's log
+ * viewer, which isn't accessible to everyone.
+ */
+export interface DiagnosticEntry {
+  label: "profile" | "crawler";
+  attempt: number;
+  status?: number;
+  ok?: boolean;
+  durationMs: number;
+  error?: string;
+  note?: string;
+}
+export type Diagnostics = DiagnosticEntry[];
+
 export class TikTokFetchError extends Error {
   code: TikTokErrorCode;
 
@@ -72,15 +89,18 @@ export function normalizeHandle(raw: string): string {
  * without TikTok's signed internal pagination API, which requires a full
  * browser session to compute.
  */
-export async function fetchPublicProfile(rawHandle: string): Promise<PublicProfileStats> {
+export async function fetchPublicProfile(
+  rawHandle: string,
+  diagnostics?: Diagnostics
+): Promise<PublicProfileStats> {
   const handle = normalizeHandle(rawHandle);
   if (!handle || !/^[\w.-]{1,64}$/.test(handle)) {
     throw new TikTokFetchError("Identifiant TikTok invalide.", "INVALID_HANDLE");
   }
 
   const [profile, videos] = await Promise.all([
-    fetchProfilePage(handle),
-    fetchCrawlerVideoList(handle),
+    fetchProfilePage(handle, diagnostics),
+    fetchCrawlerVideoList(handle, diagnostics),
   ]);
 
   if (videos.length > 0) {
@@ -106,7 +126,8 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
-async function fetchProfilePage(handle: string): Promise<PublicProfileStats> {
+async function fetchProfilePage(handle: string, diagnostics?: Diagnostics): Promise<PublicProfileStats> {
+  const startedAt = Date.now();
   let response: Response;
   try {
     response = await fetchWithTimeout(
@@ -121,8 +142,21 @@ async function fetchProfilePage(handle: string): Promise<PublicProfileStats> {
       },
       8000
     );
+    diagnostics?.push({
+      label: "profile",
+      attempt: 1,
+      status: response.status,
+      ok: response.ok,
+      durationMs: Date.now() - startedAt,
+    });
   } catch (error) {
     console.error(`[tiktok] profile fetch failed for @${handle}:`, error);
+    diagnostics?.push({
+      label: "profile",
+      attempt: 1,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
     throw new TikTokFetchError("Impossible de contacter TikTok pour le moment.", "NETWORK");
   }
 
@@ -167,8 +201,9 @@ async function fetchProfilePage(handle: string): Promise<PublicProfileStats> {
  * failure is logged with the reason, since this used to fail silently and
  * was impossible to diagnose from Vercel's production logs.
  */
-async function fetchCrawlerVideoList(handle: string): Promise<PublicVideoStats[]> {
+async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics): Promise<PublicVideoStats[]> {
   for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const startedAt = Date.now();
     try {
       const response = await fetchWithTimeout(
         `https://www.tiktok.com/@${encodeURIComponent(handle)}`,
@@ -183,6 +218,13 @@ async function fetchCrawlerVideoList(handle: string): Promise<PublicVideoStats[]
       );
       if (!response.ok) {
         console.warn(`[tiktok] crawler fetch for @${handle} returned HTTP ${response.status} (attempt ${attempt}/2)`);
+        diagnostics?.push({
+          label: "crawler",
+          attempt,
+          status: response.status,
+          ok: false,
+          durationMs: Date.now() - startedAt,
+        });
         if (attempt < 2) {
           await sleep(500);
           continue;
@@ -199,6 +241,14 @@ async function fetchCrawlerVideoList(handle: string): Promise<PublicVideoStats[]
           `[tiktok] crawler fetch for @${handle} succeeded but ItemList was empty/missing (attempt ${attempt}/2)`
         );
       }
+      diagnostics?.push({
+        label: "crawler",
+        attempt,
+        status: response.status,
+        ok: true,
+        durationMs: Date.now() - startedAt,
+        note: `ItemList entries: ${items.length}, html length: ${html.length}`,
+      });
 
       return items
         .map(mapJsonLdVideo)
@@ -206,6 +256,12 @@ async function fetchCrawlerVideoList(handle: string): Promise<PublicVideoStats[]
         .sort((a, b) => (b.createTime ?? 0) - (a.createTime ?? 0));
     } catch (error) {
       console.error(`[tiktok] crawler fetch for @${handle} threw (attempt ${attempt}/2):`, error);
+      diagnostics?.push({
+        label: "crawler",
+        attempt,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
       if (attempt < 2) {
         await sleep(500);
         continue;

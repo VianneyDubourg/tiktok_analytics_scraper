@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchPublicProfile, TikTokFetchError } from "@/lib/tiktok";
+import { fetchPublicProfile, TikTokFetchError, type Diagnostics } from "@/lib/tiktok";
 import { incrementSearches } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
@@ -19,18 +19,26 @@ const STATUS_BY_CODE: Record<string, number> = {
 
 export async function GET(request: NextRequest) {
   const handle = request.nextUrl.searchParams.get("handle") ?? "";
+  // ?debug=1 surfaces the raw fetch trail (status codes, timings, errors) in
+  // the JSON response itself, so a "it doesn't work in production" report can
+  // be diagnosed by opening a URL - no hosting dashboard access needed.
+  const debug = request.nextUrl.searchParams.get("debug") === "1";
+  const diagnostics: Diagnostics | undefined = debug ? [] : undefined;
 
   try {
-    const profile = await fetchPublicProfile(handle);
+    const profile = await fetchPublicProfile(handle, diagnostics);
     const searches = await incrementSearches();
-    return NextResponse.json({ profile, searches });
+    return NextResponse.json({ profile, searches, ...(debug ? { diagnostics } : {}) });
   } catch (error) {
     if (error instanceof TikTokFetchError) {
       return NextResponse.json(
-        { error: error.message, code: error.code },
+        { error: error.message, code: error.code, ...(debug ? { diagnostics } : {}) },
         { status: STATUS_BY_CODE[error.code] ?? 500 }
       );
     }
-    return NextResponse.json({ error: "Erreur inattendue." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Erreur inattendue.", ...(debug ? { diagnostics } : {}) },
+      { status: 500 }
+    );
   }
 }
