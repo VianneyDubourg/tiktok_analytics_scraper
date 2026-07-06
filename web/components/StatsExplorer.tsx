@@ -51,8 +51,9 @@ export default function StatsExplorer({ initialCounters }: Props) {
         </h1>
         <p className="max-w-xl text-balance text-zinc-600 dark:text-zinc-400">
           Entrez un identifiant TikTok public (@handle) pour voir ses statistiques
-          publiques : abonnés, abonnements, likes totaux et nombre de vidéos.
-          Gratuit, instantané, sans connexion, sans compte.
+          publiques : abonnés, likes totaux, et vues / likes / commentaires /
+          partages de ses dernières vidéos. Gratuit, instantané, sans
+          connexion, sans compte.
         </p>
       </header>
 
@@ -120,9 +121,15 @@ function ProfileResults({ profile }: { profile: PublicProfileStats }) {
 
       {profile.videos.length > 0 ? (
         <div className="flex flex-col gap-4">
-          <h3 className="text-lg font-semibold">
-            Vidéos récentes ({profile.videos.length})
-          </h3>
+          <div>
+            <h3 className="text-lg font-semibold">
+              Vidéos récentes ({profile.videos.length})
+            </h3>
+            <p className="text-xs text-zinc-400">
+              TikTok ne fournit publiquement qu&apos;un échantillon des vidéos
+              les plus récentes, pas le catalogue complet.
+            </p>
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {profile.videos.map((video) => (
               <a
@@ -159,9 +166,10 @@ function ProfileResults({ profile }: { profile: PublicProfileStats }) {
         </div>
       ) : (
         <p className="rounded-lg bg-zinc-50 px-4 py-3 text-center text-sm text-zinc-500 dark:bg-zinc-900">
-          Le détail par vidéo n&apos;est pas disponible pour le moment : TikTok
-          ne l&apos;expose plus publiquement sans navigateur connecté. Les
-          statistiques globales du profil ci-dessus restent fiables.
+          Le détail par vidéo est temporairement indisponible pour ce compte
+          (limite de trafic TikTok probable). Les statistiques globales du
+          profil ci-dessus restent fiables : réessayez dans quelques minutes
+          pour le détail par vidéo.
         </p>
       )}
     </section>

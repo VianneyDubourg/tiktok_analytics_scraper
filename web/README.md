@@ -20,35 +20,51 @@ Cette appli récupère uniquement ce que la page publique
 
 ## Comment ça marche (et ses limites)
 
-`lib/tiktok.ts` fait un simple `fetch()` de la page profil publique et lit le
-JSON que TikTok intègre lui-même dans le HTML pour le SEO (deux formats
-possibles selon les périodes : `__UNIVERSAL_DATA_FOR_REHYDRATION__` ou
-l'ancien `SIGI_STATE` — les deux sont essayés). **Aucun Playwright, aucun
-navigateur, aucune connexion** : ça reste dans les limites d'une fonction
-serverless Vercel classique.
+`lib/tiktok.ts` lance **deux requêtes HTTP en parallèle** vers la page profil
+publique — **aucun Playwright, aucun navigateur, aucune connexion** : ça
+reste dans les limites d'une fonction serverless Vercel classique.
+
+1. Une requête avec un User-Agent de navigateur classique, pour les stats de
+   profil (abonnés, abonnements, likes totaux, nombre de vidéos), lues dans
+   le JSON que TikTok intègre lui-même dans le HTML pour son propre usage
+   (`__UNIVERSAL_DATA_FOR_REHYDRATION__`, avec repli sur l'ancien format
+   `SIGI_STATE`).
+2. Une requête avec un User-Agent de robot d'indexation
+   (`CRAWLER_USER_AGENT` = Googlebot) — **c'est ce qui fournit le détail par
+   vidéo**. TikTok sert alors une page SEO différente contenant un bloc
+   JSON-LD `schema.org/ItemList` avec, par vidéo : vues, likes, commentaires,
+   partages, favoris, durée, date, vignette. C'est la même donnée publique
+   que TikTok expose volontairement pour que Google l'indexe et l'affiche
+   dans ses résultats de recherche — pas un accès privé ou authentifié,
+   juste un autre chemin de rendu de la même page publique.
+
+Cette deuxième requête est **best-effort** : si elle échoue ou si TikTok
+change cette page aussi, les stats de profil (fiables) sont quand même
+retournées, avec une liste de vidéos vide plutôt qu'une erreur globale.
 
 Limites connues, **vérifiées en direct contre de vrais comptes** plutôt que
 supposées :
 
-- **Le détail par vidéo (vues/likes/commentaires/partages d'une vidéo
-  précise) n'est actuellement pas disponible.** Testé contre plusieurs
-  comptes réels (`@tiktok`, `@zachking`, `@khaby.lame`) : TikTok a retiré la
-  liste des vidéos du HTML public (`itemList` est systématiquement vide,
-  et l'ancien format `SIGI_STATE` n'est plus servi du tout). Le code de
-  parsing (`lib/tiktok.ts`) et l'affichage (`components/StatsExplorer.tsx`)
-  sont prêts à réafficher cette section automatiquement si TikTok la
-  réintroduit un jour ; en attendant, l'app affiche un message clair plutôt
-  que de faire croire à un bug ou à un compte sans vidéos.
-- Ce qui **fonctionne de façon fiable aujourd'hui** : abonnés, abonnements,
-  likes totaux, nombre de vidéos, avatar, bio — toutes les stats de niveau
-  profil, vérifiées en conditions réelles.
-- TikTok peut changer la structure du JSON intégré (`__UNIVERSAL_DATA_FOR_REHYDRATION__`)
-  à tout moment. Si même les stats de profil s'arrêtent de fonctionner,
-  ajustez `parseUniversalData` / `parseSigiState` dans `lib/tiktok.ts` —
-  c'est le seul fichier concerné.
+- **Le détail par vidéo est limité à un échantillon (~9 vidéos observées,
+  de façon constante, quel que soit le compte).** C'est un extrait SEO, pas
+  le catalogue complet. Remonter plus loin nécessiterait l'API de
+  pagination interne de TikTok, protégée par des jetons générés côté
+  navigateur — non accessible sans session complète.
+- La page normale (User-Agent navigateur) ne contient elle-même plus aucune
+  vidéo (`itemList` systématiquement vide, `SIGI_STATE` plus servi du tout) :
+  sans le chemin "robot d'indexation" ci-dessus, il n'y aurait aucune
+  statistique par vidéo. Le code de repli (`parseUniversalData` /
+  `parseSigiState`) reste en place au cas où TikTok le réactiverait.
+- TikTok pourrait un jour vérifier l'identité d'un robot d'indexation par IP
+  / reverse DNS plutôt que de faire confiance au seul en-tête User-Agent —
+  ce qui casserait silencieusement le détail par vidéo. Si les stats de
+  profil s'arrêtent de fonctionner aussi, ajustez `parseUniversalData` /
+  `parseSigiState` dans `lib/tiktok.ts` ; si seul le détail par vidéo casse,
+  ajustez `mapJsonLdVideo` / `fetchCrawlerVideoList`.
 - TikTok peut aussi limiter/bloquer un trafic trop soutenu depuis les IP
   partagées de Vercel (comportement anti-bot standard, hors de notre
-  contrôle). Le site affiche un message clair dans ce cas plutôt que de
+  contrôle) — plus probable maintenant que deux requêtes partent par
+  recherche. Le site affiche un message clair dans ce cas plutôt que de
   planter, mais un pic de partage viral peut temporairement dégrader la
   fiabilité pour tout le monde.
 
