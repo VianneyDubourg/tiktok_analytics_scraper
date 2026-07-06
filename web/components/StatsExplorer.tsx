@@ -139,6 +139,19 @@ export default function StatsExplorer() {
       <footer className="mt-auto flex flex-col items-center gap-4 pt-10 text-xs text-[var(--muted)] sm:text-sm">
         {/* Visit/search counters hidden for now (Upstash not yet connected) -
             see app/page.tsx and lib/redis.ts, both still counting silently. */}
+        <a
+          href="https://www.producthunt.com/products/tiktok-stats-checker?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-tiktok-stats-checker"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1189386&theme=light"
+            alt="TikTok Stats Checker - Analyze any public TikTok account in seconds | Product Hunt"
+            width={250}
+            height={54}
+          />
+        </a>
         <p className="flex flex-wrap items-center justify-center gap-1 text-center">
           100% gratuit &amp; open source · Codé avec
           <HeartIcon fill="currentColor" className="h-3.5 w-3.5 text-[var(--accent-pink)]" />
