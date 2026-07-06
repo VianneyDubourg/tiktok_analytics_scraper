@@ -99,7 +99,7 @@ export async function scanUserAgents(handle: string): Promise<UserAgentScanResul
       results.push({
         name,
         durationMs: Date.now() - startedAt,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        error: describeError(error),
       });
     }
   }
@@ -131,6 +131,25 @@ export class TikTokFetchError extends Error {
     super(message);
     this.code = code;
   }
+}
+
+/**
+ * `TypeError: fetch failed` alone is useless - undici/Node wraps the real
+ * reason (DNS failure, connection refused, bad proxy auth, TLS error...) in
+ * `error.cause`, which gets silently dropped by a plain `${error.message}`.
+ * Surfacing it is what makes a proxy misconfiguration diagnosable from the
+ * `?debug=1` JSON alone, without needing another round trip.
+ */
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = (error as Error & { cause?: unknown }).cause;
+  const causeText =
+    cause instanceof Error
+      ? ` (cause: ${cause.name}: ${cause.message})`
+      : cause !== undefined
+        ? ` (cause: ${String(cause)})`
+        : "";
+  return `${error.name}: ${error.message}${causeText}`;
 }
 
 /** Accepts "@user", "user", or a full profile URL and returns the bare handle. */
@@ -246,7 +265,7 @@ async function fetchProfilePage(handle: string, diagnostics?: Diagnostics): Prom
       label: "profile",
       attempt: 1,
       durationMs: Date.now() - startedAt,
-      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      error: describeError(error),
     });
     throw new TikTokFetchError("Couldn't reach TikTok right now.", "NETWORK");
   }
@@ -363,7 +382,7 @@ async function fetchCrawlerVideoList(handle: string, diagnostics?: Diagnostics):
         label: "crawler",
         attempt,
         durationMs: Date.now() - startedAt,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        error: describeError(error),
         viaProxy: Boolean(proxyAgent),
       });
       if (attempt < maxAttempts) {
