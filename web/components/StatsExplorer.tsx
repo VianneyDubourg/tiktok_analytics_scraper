@@ -273,6 +273,11 @@ function ProfileResults({ profile, onRetryVideos, videosRetrying }: ProfileResul
             ))}
           </div>
         </div>
+      ) : profile.videoCount === 0 ? (
+        <div className="surface-card flex flex-col items-center gap-2 rounded-2xl px-5 py-6 text-center text-sm text-[var(--muted)]">
+          <ClipIcon className="h-5 w-5 text-[var(--muted)]" />
+          <p>Ce compte n&apos;a pas encore publié de vidéo publique.</p>
+        </div>
       ) : (
         <div className="surface-card flex flex-col items-center gap-3 rounded-2xl px-5 py-6 text-center text-sm text-[var(--muted)]">
           <AlertIcon className="h-5 w-5 text-[var(--accent-pink)]" />
