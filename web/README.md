@@ -38,9 +38,18 @@ reste dans les limites d'une fonction serverless Vercel classique.
    dans ses résultats de recherche — pas un accès privé ou authentifié,
    juste un autre chemin de rendu de la même page publique.
 
-Cette deuxième requête est **best-effort** : si elle échoue ou si TikTok
-change cette page aussi, les stats de profil (fiables) sont quand même
-retournées, avec une liste de vidéos vide plutôt qu'une erreur globale.
+Cette deuxième requête est **best-effort** (avec une nouvelle tentative
+automatique en cas d'échec transitoire) : si elle échoue quand même ou si
+TikTok change cette page aussi, les stats de profil (fiables) sont quand
+même retournées, avec une liste de vidéos vide plutôt qu'une erreur globale
+— l'utilisateur peut aussi cliquer sur "Réessayer" dans l'interface.
+
+**Bug TikTok observé et corrigé côté client** : pour au moins une vidéo très
+vue (~2,4 milliards de vues), TikTok renvoie le compteur sous forme d'entier
+signé 32 bits qui a débordé (`-1894967296` au lieu de `2400000000`). Comme
+aucun compteur de ce type ne peut légitimement être négatif, `toNumber()`
+dans `lib/tiktok.ts` corrige automatiquement toute valeur négative en lui
+ajoutant 2^32.
 
 Limites connues, **vérifiées en direct contre de vrais comptes** plutôt que
 supposées :
@@ -101,15 +110,34 @@ compteurs restent simplement à 0.
 4. Déployez : aucune autre configuration nécessaire, c'est un projet
    Next.js standard.
 
+**Note de version** : le projet est volontairement épinglé sur **Next.js
+15** (`15.5.20`), pas la 16. La 16 vient de sortir au moment de l'écriture
+et le déploiement Vercel plantait avec un 404 générique sur toutes les
+routes (build réussi, mais aucune route ne répondait) — vraisemblablement
+un souci de compatibilité builder/version trop récente. Si une mise à jour
+vers Next 16 est tentée un jour, vérifier d'abord qu'un déploiement Vercel
+simple fonctionne avant de pousser en production.
+
 ## Structure
 
 ```
 app/page.tsx              Page d'accueil (Server Component, incrémente les vues)
 app/api/stats/route.ts    GET ?handle=... -> stats publiques du profil
 app/api/counters/route.ts GET -> compteurs actuels
+app/icon.png, favicon.ico Favicon généré (dégradé cyan/rose + icône graphique)
 components/StatsExplorer  Formulaire + affichage des résultats (Client Component)
+components/icons.tsx      Icônes SVG inline (pas d'emoji, pas de dépendance externe)
 lib/tiktok.ts             Fetch + parsing du JSON public TikTok (le plus fragile)
 lib/redis.ts              Compteurs Upstash, no-op si non configuré
 lib/format.ts             Formatage des nombres/dates/durées
 types.ts                  Types partagés
 ```
+
+## Design
+
+Le thème visuel (dégradé cyan/rose façon TikTok, cartes "verre" translucides,
+texte en dégradé, halo d'ambiance en arrière-plan) est défini entièrement en
+CSS dans `app/globals.css` via des variables (`--accent-cyan`,
+`--accent-pink`, `--surface`, etc.), sans dépendance de design externe.
+S'adapte automatiquement au thème clair/sombre du système
+(`prefers-color-scheme`).

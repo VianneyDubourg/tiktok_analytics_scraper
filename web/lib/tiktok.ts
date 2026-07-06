@@ -137,29 +137,51 @@ async function fetchProfilePage(handle: string): Promise<PublicProfileStats> {
   return parsed;
 }
 
-/** Best-effort: never throws, resolves to [] on any failure. */
+/**
+ * Best-effort: never throws, resolves to [] if every attempt fails. TikTok's
+ * anti-bot layer occasionally rejects a single request transiently (observed
+ * in testing), so this retries once after a short delay before giving up -
+ * cheap insurance against a spurious "unavailable" for the user.
+ */
 async function fetchCrawlerVideoList(handle: string): Promise<PublicVideoStats[]> {
-  try {
-    const response = await fetch(`https://www.tiktok.com/@${encodeURIComponent(handle)}`, {
-      headers: {
-        "User-Agent": CRAWLER_USER_AGENT,
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      cache: "no-store",
-    });
-    if (!response.ok) return [];
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await fetch(`https://www.tiktok.com/@${encodeURIComponent(handle)}`, {
+        headers: {
+          "User-Agent": CRAWLER_USER_AGENT,
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        if (attempt < 2) {
+          await sleep(700);
+          continue;
+        }
+        return [];
+      }
 
-    const html = await response.text();
-    const data = extractScriptJson(html, "ItemList");
-    const items: any[] = Array.isArray(data?.itemListElement) ? data.itemListElement : [];
+      const html = await response.text();
+      const data = extractScriptJson(html, "ItemList");
+      const items: any[] = Array.isArray(data?.itemListElement) ? data.itemListElement : [];
 
-    return items
-      .map(mapJsonLdVideo)
-      .filter((video): video is PublicVideoStats => video !== null)
-      .sort((a, b) => (b.createTime ?? 0) - (a.createTime ?? 0));
-  } catch {
-    return [];
+      return items
+        .map(mapJsonLdVideo)
+        .filter((video): video is PublicVideoStats => video !== null)
+        .sort((a, b) => (b.createTime ?? 0) - (a.createTime ?? 0));
+    } catch {
+      if (attempt < 2) {
+        await sleep(700);
+        continue;
+      }
+      return [];
+    }
   }
+  return [];
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -186,11 +208,20 @@ function extractScriptJson(html: string, id: string): any | null {
 }
 
 function toNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) {
-    return Number(value);
+  let parsed: number | null = null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    parsed = value;
+  } else if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) {
+    parsed = Number(value);
   }
-  return null;
+  if (parsed === null) return null;
+
+  // TikTok's own JSON-LD occasionally reports a large counter as a wrapped
+  // signed 32-bit integer (observed: a video with ~2.4B views reported as
+  // userInteractionCount: -1894967296). Every count/date/duration this
+  // function parses is semantically non-negative, so recover the intended
+  // value instead of surfacing a nonsensical negative number.
+  return parsed < 0 ? parsed + 2 ** 32 : parsed;
 }
 
 /** Parses an ISO-8601 duration ("PT27S", "PT1M5S") into whole seconds. */
