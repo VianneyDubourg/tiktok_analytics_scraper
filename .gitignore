@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.session/
+logs/
+data/*.xlsx
+data/*.csv
+data/*.db
+!data/.gitkeep
