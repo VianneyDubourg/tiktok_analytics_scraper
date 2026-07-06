@@ -143,15 +143,30 @@ export default function StatsExplorer({ initialCounters }: Props) {
         <ProfileResults profile={profile} onRetryVideos={retryVideos} videosRetrying={videosRetrying} />
       )}
 
-      <footer className="mt-auto flex justify-center gap-3 pt-10 text-xs text-[var(--muted)] sm:text-sm">
-        <span className="surface-card flex items-center gap-2 rounded-full px-4 py-2">
-          <EyeIcon className="h-3.5 w-3.5" />
-          {formatExact(counters.views)} visites
-        </span>
-        <span className="surface-card flex items-center gap-2 rounded-full px-4 py-2">
-          <SearchIcon className="h-3.5 w-3.5" />
-          {formatExact(counters.searches)} comptes analysés
-        </span>
+      <footer className="mt-auto flex flex-col items-center gap-4 pt-10 text-xs text-[var(--muted)] sm:text-sm">
+        <div className="flex justify-center gap-3">
+          <span className="surface-card flex items-center gap-2 rounded-full px-4 py-2">
+            <EyeIcon className="h-3.5 w-3.5" />
+            {formatExact(counters.views)} visites
+          </span>
+          <span className="surface-card flex items-center gap-2 rounded-full px-4 py-2">
+            <SearchIcon className="h-3.5 w-3.5" />
+            {formatExact(counters.searches)} comptes analysés
+          </span>
+        </div>
+        <p className="flex flex-wrap items-center justify-center gap-1 text-center">
+          100% gratuit &amp; open source · Codé avec
+          <HeartIcon fill="currentColor" className="h-3.5 w-3.5 text-[var(--accent-pink)]" />
+          par{" "}
+          <a
+            href="https://www.instagram.com/vianney_fpv"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-[var(--foreground)] underline decoration-[var(--surface-border)] underline-offset-2 hover:decoration-[var(--accent-pink)]"
+          >
+            @vianney_fpv
+          </a>
+        </p>
       </footer>
     </div>
   );
