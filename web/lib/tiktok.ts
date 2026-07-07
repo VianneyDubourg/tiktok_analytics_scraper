@@ -120,6 +120,48 @@ export async function scanUserAgents(handle: string): Promise<UserAgentScanResul
   return results;
 }
 
+export interface ProxyHeaderCheckResult {
+  status?: number;
+  ok?: boolean;
+  durationMs: number;
+  headersSeenByTarget?: Record<string, string>;
+  error?: string;
+}
+
+/**
+ * One-off diagnostic: after confirming the proxy connection itself works
+ * (?debug=1&scan=1 or a normal search now returns HTTP 200 via the proxy)
+ * but TikTok's ItemList still comes back empty, this checks a much simpler
+ * question first - does our custom User-Agent even survive the trip through
+ * the proxy, or does the provider override it with its own? postman-echo
+ * echoes back exactly what headers *it* received, which settles that
+ * independently of anything TikTok-specific. Only invoked via
+ * ?debug=1&echo=1.
+ */
+export async function checkProxyHeaders(): Promise<ProxyHeaderCheckResult> {
+  const proxyAgent = getCrawlerProxyAgent();
+  const startedAt = Date.now();
+  try {
+    const response = await fetchWithTimeout(
+      "https://postman-echo.com/headers",
+      {
+        headers: { "User-Agent": CRAWLER_USER_AGENT, "Accept-Language": "en-US,en;q=0.9" },
+        cache: "no-store",
+        ...(proxyAgent ? { dispatcher: proxyAgent } : {}),
+      },
+      20000
+    );
+    const durationMs = Date.now() - startedAt;
+    if (!response.ok) {
+      return { status: response.status, ok: false, durationMs };
+    }
+    const body = (await response.json()) as { headers?: Record<string, string> };
+    return { status: response.status, ok: true, durationMs, headersSeenByTarget: body.headers };
+  } catch (error) {
+    return { durationMs: Date.now() - startedAt, error: describeError(error) };
+  }
+}
+
 /**
  * Optional diagnostic trail for `?debug=1` requests (see app/api/stats).
  * Lets a report of "it doesn't work in production" be diagnosed from the

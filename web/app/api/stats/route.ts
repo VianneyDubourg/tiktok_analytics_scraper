@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchPublicProfile, scanUserAgents, TikTokFetchError, type Diagnostics } from "@/lib/tiktok";
+import {
+  checkProxyHeaders,
+  fetchPublicProfile,
+  scanUserAgents,
+  TikTokFetchError,
+  type Diagnostics,
+} from "@/lib/tiktok";
 import { incrementSearches } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +37,15 @@ export async function GET(request: NextRequest) {
   if (debug && request.nextUrl.searchParams.get("scan") === "1") {
     const scan = await scanUserAgents(handle || "tiktok");
     return NextResponse.json({ scan });
+  }
+
+  // ?debug=1&echo=1 checks what User-Agent actually arrives on the other
+  // side of TIKTOK_PROXY_URL (via httpbin.org/headers) - settles whether a
+  // proxy provider is silently overriding our header, independent of
+  // anything TikTok-specific.
+  if (debug && request.nextUrl.searchParams.get("echo") === "1") {
+    const echo = await checkProxyHeaders();
+    return NextResponse.json({ echo });
   }
 
   try {
