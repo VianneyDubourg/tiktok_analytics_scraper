@@ -20,7 +20,21 @@ let crawlerProxyAgent: ProxyAgent | null | undefined;
 function getCrawlerProxyAgent(): ProxyAgent | null {
   if (crawlerProxyAgent !== undefined) return crawlerProxyAgent;
   const proxyUrl = process.env.TIKTOK_PROXY_URL;
-  crawlerProxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : null;
+  crawlerProxyAgent = proxyUrl
+    ? new ProxyAgent({
+        uri: proxyUrl,
+        // Confirmed in production: this class of scraping proxy terminates
+        // TLS itself and presents its own certificate rather than passing a
+        // transparent CONNECT tunnel through to TikTok, which Node's default
+        // trust store rejects ("unable to verify the first certificate").
+        // We've already deliberately routed this request through a paid
+        // third party we trust to relay it; the only thing flowing through
+        // here is a public TikTok profile page, nothing sensitive - so
+        // accepting their intercepting cert is a reasonable, narrowly scoped
+        // trade-off rather than a real security regression.
+        requestTls: { rejectUnauthorized: false },
+      })
+    : null;
   return crawlerProxyAgent;
 }
 

@@ -97,6 +97,14 @@ Sans cette variable, le comportement est inchangé : la requête part
 directement (et échoue sur les IP bloquées comme celles de Vercel), les
 stats de profil restent fiables, seul le détail par vidéo est indisponible.
 
+**Note technique vérifiée en conditions réelles** : ce type de proxy de
+scraping termine généralement le TLS lui-même plutôt que de faire un tunnel
+CONNECT transparent (erreur observée : `unable to verify the first
+certificate`). `lib/tiktok.ts` désactive donc la vérification du certificat
+uniquement pour cette connexion proxifiée (`requestTls: { rejectUnauthorized:
+false }`) — testé et confirmé nécessaire contre un vrai proxy. Seule une
+page TikTok publique transite par ce chemin, rien de sensible.
+
 ### Diagnostiquer un souci en production : `?debug=1` et `?scan=1`
 
 Deux paramètres de requête sur `/api/stats`, utiles pour diagnostiquer un
